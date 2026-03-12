@@ -10,33 +10,47 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface Challenge {
+  'id' : ChallengeId,
+  'creator' : Principal,
+  'colorPref' : string,
+  'createdAt' : Time,
+  'timeControl' : TimeControl,
+  'acceptedBy' : [] | [Principal],
+}
+export type ChallengeId = bigint;
 export interface Community {
   'id' : CommunityId,
-  'members' : Array<Principal>,
   'owner' : Principal,
   'name' : string,
   'createdAt' : Time,
   'description' : string,
 }
 export type CommunityId = bigint;
-export interface NotationGame {
-  'id' : NotationGameId,
-  'pgn' : string,
-  'title' : string,
-  'owner' : Principal,
-  'createdAt' : Time,
-}
-export type NotationGameId = bigint;
-export interface Post {
+export interface CommunityPost {
+  'id' : PostId,
   'title' : string,
   'content' : string,
   'communityId' : CommunityId,
   'createdAt' : Time,
   'author' : Principal,
 }
+export interface Notation {
+  'id' : NotationId,
+  'pgn' : string,
+  'title' : string,
+  'owner' : Principal,
+  'createdAt' : Time,
+  'description' : string,
+  'photoBlobId' : [] | [string],
+}
+export type NotationId = bigint;
+export type PostId = bigint;
 export type Time = bigint;
+export interface TimeControl { 'initialTime' : bigint, 'increment' : bigint }
 export interface UserProfile {
-  'displayName' : string,
+  'bio' : string,
+  'username' : string,
   'gamesPlayed' : bigint,
   'wins' : bigint,
   'losses' : bigint,
@@ -46,26 +60,60 @@ export interface UserProfile {
 export type UserRole = { 'admin' : null } |
   { 'user' : null } |
   { 'guest' : null };
+export interface _CaffeineStorageCreateCertificateResult {
+  'method' : string,
+  'blob_hash' : string,
+}
+export interface _CaffeineStorageRefillInformation {
+  'proposed_top_up_amount' : [] | [bigint],
+}
+export interface _CaffeineStorageRefillResult {
+  'success' : [] | [boolean],
+  'topped_up_amount' : [] | [bigint],
+}
 export interface _SERVICE {
+  '_caffeineStorageBlobIsLive' : ActorMethod<[Uint8Array], boolean>,
+  '_caffeineStorageBlobsToDelete' : ActorMethod<[], Array<Uint8Array>>,
+  '_caffeineStorageConfirmBlobDeletion' : ActorMethod<
+    [Array<Uint8Array>],
+    undefined
+  >,
+  '_caffeineStorageCreateCertificate' : ActorMethod<
+    [string],
+    _CaffeineStorageCreateCertificateResult
+  >,
+  '_caffeineStorageRefillCashier' : ActorMethod<
+    [[] | [_CaffeineStorageRefillInformation]],
+    _CaffeineStorageRefillResult
+  >,
+  '_caffeineStorageUpdateGatewayPrincipals' : ActorMethod<[], undefined>,
   '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
+  'acceptChallenge' : ActorMethod<[ChallengeId], undefined>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
+  'cancelChallenge' : ActorMethod<[ChallengeId], undefined>,
+  'createChallenge' : ActorMethod<[TimeControl, string], ChallengeId>,
   'createCommunity' : ActorMethod<[string, string], CommunityId>,
-  'createPost' : ActorMethod<[CommunityId, string, string], undefined>,
-  'deleteNotationGame' : ActorMethod<[NotationGameId], undefined>,
+  'createPost' : ActorMethod<[CommunityId, string, string], PostId>,
+  'deleteNotation' : ActorMethod<[NotationId], undefined>,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole>,
-  'getCommunity' : ActorMethod<[CommunityId], Community>,
-  'getNotationGame' : ActorMethod<[NotationGameId], NotationGame>,
+  'getCommunity' : ActorMethod<[CommunityId], [] | [Community]>,
+  'getCommunityMembers' : ActorMethod<[CommunityId], Array<Principal>>,
+  'getNotation' : ActorMethod<[NotationId], [] | [Notation]>,
+  'getPost' : ActorMethod<[CommunityId, PostId], [] | [CommunityPost]>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
   'joinCommunity' : ActorMethod<[CommunityId], undefined>,
   'leaveCommunity' : ActorMethod<[CommunityId], undefined>,
   'listCommunities' : ActorMethod<[], Array<Community>>,
-  'listNotationGames' : ActorMethod<[], Array<NotationGame>>,
-  'listPosts' : ActorMethod<[CommunityId], Array<Post>>,
-  'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
-  'saveNotationGame' : ActorMethod<[string, string], NotationGameId>,
-  'updateDisplayName' : ActorMethod<[string], undefined>,
+  'listNotations' : ActorMethod<[], Array<Notation>>,
+  'listOpenChallenges' : ActorMethod<[], Array<Challenge>>,
+  'listPosts' : ActorMethod<[CommunityId], Array<CommunityPost>>,
+  'saveCallerUserProfile' : ActorMethod<[string, string], undefined>,
+  'saveNotation' : ActorMethod<
+    [string, string, string, [] | [string]],
+    NotationId
+  >,
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];

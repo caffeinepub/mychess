@@ -1,11 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Community, NotationGame, Post } from "../backend.d";
-import type { CommunityId, NotationGameId } from "../backend.d";
+import type { ChallengeId, CommunityId, NotationId } from "../backend.d";
 import { useActor } from "./useActor";
 
 export function useListCommunities() {
   const { actor, isFetching } = useActor();
-  return useQuery<Community[]>({
+  return useQuery({
     queryKey: ["communities"],
     queryFn: async () => {
       if (!actor) return [];
@@ -17,7 +16,7 @@ export function useListCommunities() {
 
 export function useGetCommunity(id: CommunityId | null) {
   const { actor, isFetching } = useActor();
-  return useQuery<Community | null>({
+  return useQuery({
     queryKey: ["community", id?.toString()],
     queryFn: async () => {
       if (!actor || id === null) return null;
@@ -29,7 +28,7 @@ export function useGetCommunity(id: CommunityId | null) {
 
 export function useListPosts(communityId: CommunityId | null) {
   const { actor, isFetching } = useActor();
-  return useQuery<Post[]>({
+  return useQuery({
     queryKey: ["posts", communityId?.toString()],
     queryFn: async () => {
       if (!actor || communityId === null) return [];
@@ -39,13 +38,38 @@ export function useListPosts(communityId: CommunityId | null) {
   });
 }
 
-export function useListNotationGames() {
+export function useListNotations() {
   const { actor, isFetching } = useActor();
-  return useQuery<NotationGame[]>({
-    queryKey: ["notation-games"],
+  return useQuery({
+    queryKey: ["notations"],
     queryFn: async () => {
       if (!actor) return [];
-      return actor.listNotationGames();
+      return actor.listNotations();
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useListOpenChallenges() {
+  const { actor, isFetching } = useActor();
+  return useQuery({
+    queryKey: ["challenges"],
+    queryFn: async () => {
+      if (!actor) return [];
+      return actor.listOpenChallenges();
+    },
+    enabled: !!actor && !isFetching,
+    refetchInterval: 5000,
+  });
+}
+
+export function useUserProfile() {
+  const { actor, isFetching } = useActor();
+  return useQuery({
+    queryKey: ["profile"],
+    queryFn: async () => {
+      if (!actor) return null;
+      return actor.getCallerUserProfile();
     },
     enabled: !!actor && !isFetching,
   });
@@ -74,11 +98,7 @@ export function useCreatePost() {
       communityId,
       title,
       content,
-    }: {
-      communityId: CommunityId;
-      title: string;
-      content: string;
-    }) => {
+    }: { communityId: CommunityId; title: string; content: string }) => {
       if (!actor) throw new Error("Not authenticated");
       return actor.createPost(communityId, title, content);
     },
@@ -113,38 +133,95 @@ export function useLeaveCommunity() {
   });
 }
 
-export function useSaveNotationGame() {
+export function useSaveNotation() {
   const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ title, pgn }: { title: string; pgn: string }) => {
+    mutationFn: async ({
+      title,
+      pgn,
+      description,
+      photoBlobId,
+    }: {
+      title: string;
+      pgn: string;
+      description: string;
+      photoBlobId: string | null;
+    }) => {
       if (!actor) throw new Error("Not authenticated");
-      return actor.saveNotationGame(title, pgn);
+      return actor.saveNotation(title, pgn, description, photoBlobId);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["notation-games"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["notations"] }),
   });
 }
 
-export function useDeleteNotationGame() {
+export function useDeleteNotation() {
   const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: NotationGameId) => {
+    mutationFn: async (id: NotationId) => {
       if (!actor) throw new Error("Not authenticated");
-      return actor.deleteNotationGame(id);
+      return actor.deleteNotation(id);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["notation-games"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["notations"] }),
   });
 }
 
-export function useUserProfile() {
-  const { actor, isFetching } = useActor();
-  return useQuery({
-    queryKey: ["profile"],
-    queryFn: async () => {
-      if (!actor) return null;
-      return actor.getCallerUserProfile();
+export function useCreateChallenge() {
+  const { actor } = useActor();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      initialTime,
+      increment,
+      colorPref,
+    }: {
+      initialTime: bigint;
+      increment: bigint;
+      colorPref: string;
+    }) => {
+      if (!actor) throw new Error("Not authenticated");
+      return actor.createChallenge({ initialTime, increment }, colorPref);
     },
-    enabled: !!actor && !isFetching,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["challenges"] }),
+  });
+}
+
+export function useAcceptChallenge() {
+  const { actor } = useActor();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: ChallengeId) => {
+      if (!actor) throw new Error("Not authenticated");
+      return actor.acceptChallenge(id);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["challenges"] }),
+  });
+}
+
+export function useCancelChallenge() {
+  const { actor } = useActor();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: ChallengeId) => {
+      if (!actor) throw new Error("Not authenticated");
+      return actor.cancelChallenge(id);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["challenges"] }),
+  });
+}
+
+export function useSaveUserProfile() {
+  const { actor } = useActor();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      username,
+      bio,
+    }: { username: string; bio: string }) => {
+      if (!actor) throw new Error("Not authenticated");
+      return actor.saveCallerUserProfile(username, bio);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["profile"] }),
   });
 }

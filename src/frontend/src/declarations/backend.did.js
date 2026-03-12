@@ -8,15 +8,33 @@
 
 import { IDL } from '@icp-sdk/core/candid';
 
+export const _CaffeineStorageCreateCertificateResult = IDL.Record({
+  'method' : IDL.Text,
+  'blob_hash' : IDL.Text,
+});
+export const _CaffeineStorageRefillInformation = IDL.Record({
+  'proposed_top_up_amount' : IDL.Opt(IDL.Nat),
+});
+export const _CaffeineStorageRefillResult = IDL.Record({
+  'success' : IDL.Opt(IDL.Bool),
+  'topped_up_amount' : IDL.Opt(IDL.Nat),
+});
+export const ChallengeId = IDL.Nat;
 export const UserRole = IDL.Variant({
   'admin' : IDL.Null,
   'user' : IDL.Null,
   'guest' : IDL.Null,
 });
+export const TimeControl = IDL.Record({
+  'initialTime' : IDL.Nat,
+  'increment' : IDL.Nat,
+});
 export const CommunityId = IDL.Nat;
-export const NotationGameId = IDL.Nat;
+export const PostId = IDL.Nat;
+export const NotationId = IDL.Nat;
 export const UserProfile = IDL.Record({
-  'displayName' : IDL.Text,
+  'bio' : IDL.Text,
+  'username' : IDL.Text,
   'gamesPlayed' : IDL.Nat,
   'wins' : IDL.Nat,
   'losses' : IDL.Nat,
@@ -26,37 +44,86 @@ export const UserProfile = IDL.Record({
 export const Time = IDL.Int;
 export const Community = IDL.Record({
   'id' : CommunityId,
-  'members' : IDL.Vec(IDL.Principal),
   'owner' : IDL.Principal,
   'name' : IDL.Text,
   'createdAt' : Time,
   'description' : IDL.Text,
 });
-export const NotationGame = IDL.Record({
-  'id' : NotationGameId,
+export const Notation = IDL.Record({
+  'id' : NotationId,
   'pgn' : IDL.Text,
   'title' : IDL.Text,
   'owner' : IDL.Principal,
   'createdAt' : Time,
+  'description' : IDL.Text,
+  'photoBlobId' : IDL.Opt(IDL.Text),
 });
-export const Post = IDL.Record({
+export const CommunityPost = IDL.Record({
+  'id' : PostId,
   'title' : IDL.Text,
   'content' : IDL.Text,
   'communityId' : CommunityId,
   'createdAt' : Time,
   'author' : IDL.Principal,
 });
+export const Challenge = IDL.Record({
+  'id' : ChallengeId,
+  'creator' : IDL.Principal,
+  'colorPref' : IDL.Text,
+  'createdAt' : Time,
+  'timeControl' : TimeControl,
+  'acceptedBy' : IDL.Opt(IDL.Principal),
+});
 
 export const idlService = IDL.Service({
+  '_caffeineStorageBlobIsLive' : IDL.Func(
+      [IDL.Vec(IDL.Nat8)],
+      [IDL.Bool],
+      ['query'],
+    ),
+  '_caffeineStorageBlobsToDelete' : IDL.Func(
+      [],
+      [IDL.Vec(IDL.Vec(IDL.Nat8))],
+      ['query'],
+    ),
+  '_caffeineStorageConfirmBlobDeletion' : IDL.Func(
+      [IDL.Vec(IDL.Vec(IDL.Nat8))],
+      [],
+      [],
+    ),
+  '_caffeineStorageCreateCertificate' : IDL.Func(
+      [IDL.Text],
+      [_CaffeineStorageCreateCertificateResult],
+      [],
+    ),
+  '_caffeineStorageRefillCashier' : IDL.Func(
+      [IDL.Opt(_CaffeineStorageRefillInformation)],
+      [_CaffeineStorageRefillResult],
+      [],
+    ),
+  '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
   '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
+  'acceptChallenge' : IDL.Func([ChallengeId], [], []),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+  'cancelChallenge' : IDL.Func([ChallengeId], [], []),
+  'createChallenge' : IDL.Func([TimeControl, IDL.Text], [ChallengeId], []),
   'createCommunity' : IDL.Func([IDL.Text, IDL.Text], [CommunityId], []),
-  'createPost' : IDL.Func([CommunityId, IDL.Text, IDL.Text], [], []),
-  'deleteNotationGame' : IDL.Func([NotationGameId], [], []),
+  'createPost' : IDL.Func([CommunityId, IDL.Text, IDL.Text], [PostId], []),
+  'deleteNotation' : IDL.Func([NotationId], [], []),
   'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
   'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
-  'getCommunity' : IDL.Func([CommunityId], [Community], ['query']),
-  'getNotationGame' : IDL.Func([NotationGameId], [NotationGame], ['query']),
+  'getCommunity' : IDL.Func([CommunityId], [IDL.Opt(Community)], ['query']),
+  'getCommunityMembers' : IDL.Func(
+      [CommunityId],
+      [IDL.Vec(IDL.Principal)],
+      ['query'],
+    ),
+  'getNotation' : IDL.Func([NotationId], [IDL.Opt(Notation)], ['query']),
+  'getPost' : IDL.Func(
+      [CommunityId, PostId],
+      [IDL.Opt(CommunityPost)],
+      ['query'],
+    ),
   'getUserProfile' : IDL.Func(
       [IDL.Principal],
       [IDL.Opt(UserProfile)],
@@ -66,25 +133,47 @@ export const idlService = IDL.Service({
   'joinCommunity' : IDL.Func([CommunityId], [], []),
   'leaveCommunity' : IDL.Func([CommunityId], [], []),
   'listCommunities' : IDL.Func([], [IDL.Vec(Community)], ['query']),
-  'listNotationGames' : IDL.Func([], [IDL.Vec(NotationGame)], ['query']),
-  'listPosts' : IDL.Func([CommunityId], [IDL.Vec(Post)], ['query']),
-  'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
-  'saveNotationGame' : IDL.Func([IDL.Text, IDL.Text], [NotationGameId], []),
-  'updateDisplayName' : IDL.Func([IDL.Text], [], []),
+  'listNotations' : IDL.Func([], [IDL.Vec(Notation)], ['query']),
+  'listOpenChallenges' : IDL.Func([], [IDL.Vec(Challenge)], ['query']),
+  'listPosts' : IDL.Func([CommunityId], [IDL.Vec(CommunityPost)], ['query']),
+  'saveCallerUserProfile' : IDL.Func([IDL.Text, IDL.Text], [], []),
+  'saveNotation' : IDL.Func(
+      [IDL.Text, IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
+      [NotationId],
+      [],
+    ),
 });
 
 export const idlInitArgs = [];
 
 export const idlFactory = ({ IDL }) => {
+  const _CaffeineStorageCreateCertificateResult = IDL.Record({
+    'method' : IDL.Text,
+    'blob_hash' : IDL.Text,
+  });
+  const _CaffeineStorageRefillInformation = IDL.Record({
+    'proposed_top_up_amount' : IDL.Opt(IDL.Nat),
+  });
+  const _CaffeineStorageRefillResult = IDL.Record({
+    'success' : IDL.Opt(IDL.Bool),
+    'topped_up_amount' : IDL.Opt(IDL.Nat),
+  });
+  const ChallengeId = IDL.Nat;
   const UserRole = IDL.Variant({
     'admin' : IDL.Null,
     'user' : IDL.Null,
     'guest' : IDL.Null,
   });
+  const TimeControl = IDL.Record({
+    'initialTime' : IDL.Nat,
+    'increment' : IDL.Nat,
+  });
   const CommunityId = IDL.Nat;
-  const NotationGameId = IDL.Nat;
+  const PostId = IDL.Nat;
+  const NotationId = IDL.Nat;
   const UserProfile = IDL.Record({
-    'displayName' : IDL.Text,
+    'bio' : IDL.Text,
+    'username' : IDL.Text,
     'gamesPlayed' : IDL.Nat,
     'wins' : IDL.Nat,
     'losses' : IDL.Nat,
@@ -94,37 +183,86 @@ export const idlFactory = ({ IDL }) => {
   const Time = IDL.Int;
   const Community = IDL.Record({
     'id' : CommunityId,
-    'members' : IDL.Vec(IDL.Principal),
     'owner' : IDL.Principal,
     'name' : IDL.Text,
     'createdAt' : Time,
     'description' : IDL.Text,
   });
-  const NotationGame = IDL.Record({
-    'id' : NotationGameId,
+  const Notation = IDL.Record({
+    'id' : NotationId,
     'pgn' : IDL.Text,
     'title' : IDL.Text,
     'owner' : IDL.Principal,
     'createdAt' : Time,
+    'description' : IDL.Text,
+    'photoBlobId' : IDL.Opt(IDL.Text),
   });
-  const Post = IDL.Record({
+  const CommunityPost = IDL.Record({
+    'id' : PostId,
     'title' : IDL.Text,
     'content' : IDL.Text,
     'communityId' : CommunityId,
     'createdAt' : Time,
     'author' : IDL.Principal,
   });
+  const Challenge = IDL.Record({
+    'id' : ChallengeId,
+    'creator' : IDL.Principal,
+    'colorPref' : IDL.Text,
+    'createdAt' : Time,
+    'timeControl' : TimeControl,
+    'acceptedBy' : IDL.Opt(IDL.Principal),
+  });
   
   return IDL.Service({
+    '_caffeineStorageBlobIsLive' : IDL.Func(
+        [IDL.Vec(IDL.Nat8)],
+        [IDL.Bool],
+        ['query'],
+      ),
+    '_caffeineStorageBlobsToDelete' : IDL.Func(
+        [],
+        [IDL.Vec(IDL.Vec(IDL.Nat8))],
+        ['query'],
+      ),
+    '_caffeineStorageConfirmBlobDeletion' : IDL.Func(
+        [IDL.Vec(IDL.Vec(IDL.Nat8))],
+        [],
+        [],
+      ),
+    '_caffeineStorageCreateCertificate' : IDL.Func(
+        [IDL.Text],
+        [_CaffeineStorageCreateCertificateResult],
+        [],
+      ),
+    '_caffeineStorageRefillCashier' : IDL.Func(
+        [IDL.Opt(_CaffeineStorageRefillInformation)],
+        [_CaffeineStorageRefillResult],
+        [],
+      ),
+    '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
     '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
+    'acceptChallenge' : IDL.Func([ChallengeId], [], []),
     'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+    'cancelChallenge' : IDL.Func([ChallengeId], [], []),
+    'createChallenge' : IDL.Func([TimeControl, IDL.Text], [ChallengeId], []),
     'createCommunity' : IDL.Func([IDL.Text, IDL.Text], [CommunityId], []),
-    'createPost' : IDL.Func([CommunityId, IDL.Text, IDL.Text], [], []),
-    'deleteNotationGame' : IDL.Func([NotationGameId], [], []),
+    'createPost' : IDL.Func([CommunityId, IDL.Text, IDL.Text], [PostId], []),
+    'deleteNotation' : IDL.Func([NotationId], [], []),
     'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
     'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
-    'getCommunity' : IDL.Func([CommunityId], [Community], ['query']),
-    'getNotationGame' : IDL.Func([NotationGameId], [NotationGame], ['query']),
+    'getCommunity' : IDL.Func([CommunityId], [IDL.Opt(Community)], ['query']),
+    'getCommunityMembers' : IDL.Func(
+        [CommunityId],
+        [IDL.Vec(IDL.Principal)],
+        ['query'],
+      ),
+    'getNotation' : IDL.Func([NotationId], [IDL.Opt(Notation)], ['query']),
+    'getPost' : IDL.Func(
+        [CommunityId, PostId],
+        [IDL.Opt(CommunityPost)],
+        ['query'],
+      ),
     'getUserProfile' : IDL.Func(
         [IDL.Principal],
         [IDL.Opt(UserProfile)],
@@ -134,11 +272,15 @@ export const idlFactory = ({ IDL }) => {
     'joinCommunity' : IDL.Func([CommunityId], [], []),
     'leaveCommunity' : IDL.Func([CommunityId], [], []),
     'listCommunities' : IDL.Func([], [IDL.Vec(Community)], ['query']),
-    'listNotationGames' : IDL.Func([], [IDL.Vec(NotationGame)], ['query']),
-    'listPosts' : IDL.Func([CommunityId], [IDL.Vec(Post)], ['query']),
-    'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
-    'saveNotationGame' : IDL.Func([IDL.Text, IDL.Text], [NotationGameId], []),
-    'updateDisplayName' : IDL.Func([IDL.Text], [], []),
+    'listNotations' : IDL.Func([], [IDL.Vec(Notation)], ['query']),
+    'listOpenChallenges' : IDL.Func([], [IDL.Vec(Challenge)], ['query']),
+    'listPosts' : IDL.Func([CommunityId], [IDL.Vec(CommunityPost)], ['query']),
+    'saveCallerUserProfile' : IDL.Func([IDL.Text, IDL.Text], [], []),
+    'saveNotation' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
+        [NotationId],
+        [],
+      ),
   });
 };
 

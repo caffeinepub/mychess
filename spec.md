@@ -1,25 +1,34 @@
 # MyChess
 
 ## Current State
-The Notation Viewer page lets users paste PGN text, navigate moves on a chess board, and save games. There is no way to upload a photo.
+Fresh rebuild. Previous version was a chess platform with communities, notation viewer, pairing page, and floating intro animation.
 
 ## Requested Changes (Diff)
 
 ### Add
-- Photo upload section on the Notation Viewer page: a dropzone/upload button that accepts image files (JPG, PNG, WEBP)
-- Uploaded photo is displayed in a resizable panel next to (or above) the PGN textarea so users can read the scoresheet while typing
-- "Clear photo" button to remove the uploaded image
-- Visual label/hint: "Upload a photo of your scoresheet to transcribe it"
+- Floating name animation on startup (must-have)
+- Internet Identity authentication
+- Communities system (create, browse, post discussions)
+- Notation viewer with PGN input (pre-loaded with Opera Game by Morphy, 1858) and photo upload panel
+- Pairing page modeled after lichess (time controls grouped by Bullet/Blitz/Rapid/Classical, open challenges table, live games section)
+- Math/pairing arena feature
 
 ### Modify
-- NotationViewerPage: add photo upload state, image preview panel, and wire up the dropzone
+- N/A (fresh rebuild)
 
 ### Remove
-- Nothing removed
+- No "Built with caffeine.ai" footer branding
+- No fake/placeholder stats
 
 ## Implementation Plan
-1. Add image upload state (dataURL) in NotationViewerPage
-2. Add a dropzone/file input UI below the page heading, before the main grid
-3. When an image is uploaded, show it in a scrollable/zoomable panel (simple img tag with overflow scroll + zoom controls)
-4. Add a "Clear" button to dismiss the photo
-5. Keep existing PGN workflow unchanged; photo is purely a visual aid
+1. Select authorization component for Internet Identity
+2. Generate Motoko backend: communities (CRUD), discussions/posts, notation storage with PGN + photo, pairing/challenges
+3. Build frontend:
+   - Floating intro animation (chess piece or "MyChess" text)
+   - Home page: notable games (clickable, link to notation viewer), no fake stats
+   - Communities page: list with loading skeletons, empty states, create community (auth-gated)
+   - Notation viewer: PGN editor, move-by-move board, photo upload panel (drag-and-drop, zoom/scroll)
+   - Pairing page: lichess-style time control grid, open challenges, live games
+   - Auth: Internet Identity sign-in/sign-out, robust error handling (no stuck "SIGNING IN...")
+   - Black and white color theme throughout
+   - Mobile responsive

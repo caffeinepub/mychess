@@ -14,6 +14,8 @@ import CommunitiesPage from "./pages/CommunitiesPage";
 import CommunityDetailPage from "./pages/CommunityDetailPage";
 import HomePage from "./pages/HomePage";
 import NotationViewerPage from "./pages/NotationViewerPage";
+import PairingPage from "./pages/PairingPage";
+import ProfilePage from "./pages/ProfilePage";
 
 function Layout() {
   return (
@@ -53,11 +55,25 @@ const notationRoute = createRoute({
   component: NotationViewerPage,
 });
 
+const pairingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/pairing",
+  component: PairingPage,
+});
+
+const profileRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/profile",
+  component: ProfilePage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   communitiesRoute,
   communityDetailRoute,
   notationRoute,
+  pairingRoute,
+  profileRoute,
 ]);
 
 const router = createRouter({ routeTree });

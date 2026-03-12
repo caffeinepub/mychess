@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Link, useRouter } from "@tanstack/react-router";
 import { ChevronDown, LogIn, LogOut, User } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 
 export default function Navbar() {
@@ -21,10 +21,18 @@ export default function Navbar() {
   const router = useRouter();
   const currentPath = router.state.location.pathname;
 
+  useEffect(() => {
+    if (loginStatus === "logging-in") {
+      const t = setTimeout(() => clear(), 30_000);
+      return () => clearTimeout(t);
+    }
+  }, [loginStatus, clear]);
+
   const navLinks = [
     { href: "/", label: "Home" },
     { href: "/communities", label: "Communities" },
-    { href: "/notation", label: "Notation Viewer" },
+    { href: "/pairing", label: "Pairing" },
+    { href: "/notation", label: "Notation" },
   ];
 
   return (
@@ -79,6 +87,15 @@ export default function Navbar() {
                 align="end"
                 className="bg-card border-border"
               >
+                <DropdownMenuItem asChild>
+                  <Link
+                    to="/profile"
+                    data-ocid="nav.link"
+                    className="cursor-pointer font-sans"
+                  >
+                    <User className="h-4 w-4 mr-2" /> Profile
+                  </Link>
+                </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => clear()}
                   data-ocid="nav.button"
@@ -130,6 +147,16 @@ export default function Navbar() {
               {link.label}
             </Link>
           ))}
+          {isLoggedIn && (
+            <Link
+              to="/profile"
+              data-ocid="nav.link"
+              onClick={() => setMobileOpen(false)}
+              className="block px-3 py-2 text-sm font-sans text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Profile
+            </Link>
+          )}
         </div>
       )}
     </header>

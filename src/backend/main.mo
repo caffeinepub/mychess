@@ -1,30 +1,34 @@
-import List "mo:core/List";
 import Map "mo:core/Map";
-import Iter "mo:core/Iter";
-import Text "mo:core/Text";
-import Time "mo:core/Time";
-import Order "mo:core/Order";
 import Array "mo:core/Array";
-import Runtime "mo:core/Runtime";
+import List "mo:core/List";
+import Text "mo:core/Text";
+import Nat "mo:core/Nat";
+import Iter "mo:core/Iter";
+import Order "mo:core/Order";
+import Int "mo:core/Int";
 import Principal "mo:core/Principal";
+import Runtime "mo:core/Runtime";
+import Time "mo:core/Time";
 import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
+import MixinStorage "blob-storage/Mixin";
+import Migration "migration";
 
+// Persistent state types
+(with migration = Migration.run)
 actor {
-  module Post {
-    public func compare(post1 : Post, post2 : Post) : Order.Order {
-      if (post1.createdAt < post2.createdAt) { #less } else if (post1.createdAt > post2.createdAt) {
-        #greater;
-      } else { #equal };
-    };
+  public type CommunityId = Nat;
+  public type PostId = Nat;
+  public type NotationId = Nat;
+  public type ChallengeId = Nat;
+  public type TimeControl = {
+    initialTime : Nat;
+    increment : Nat;
   };
 
-  type CommunityId = Nat;
-  type PostId = Nat;
-  type NotationGameId = Nat;
-
   public type UserProfile = {
-    displayName : Text;
+    username : Text;
+    bio : Text;
     rating : Nat;
     gamesPlayed : Nat;
     wins : Nat;
@@ -32,16 +36,16 @@ actor {
     draws : Nat;
   };
 
-  type Community = {
+  public type Community = {
     id : CommunityId;
     name : Text;
     description : Text;
     owner : Principal;
-    members : [Principal];
     createdAt : Time.Time;
   };
 
-  type Post = {
+  public type CommunityPost = {
+    id : PostId;
     communityId : CommunityId;
     author : Principal;
     title : Text;
@@ -49,25 +53,42 @@ actor {
     createdAt : Time.Time;
   };
 
-  type NotationGame = {
-    id : NotationGameId;
+  public type Notation = {
+    id : NotationId;
     title : Text;
     pgn : Text;
+    description : Text;
+    photoBlobId : ?Text;
     owner : Principal;
     createdAt : Time.Time;
   };
 
-  var nextCommunityId = 0;
-  var nextPostId = 0;
-  var nextNotationGameId = 0;
+  public type Challenge = {
+    id : ChallengeId;
+    creator : Principal;
+    timeControl : TimeControl;
+    colorPref : Text;
+    createdAt : Time.Time;
+    acceptedBy : ?Principal;
+  };
+
+  var nextCommunityId = 1;
+  var nextPostId = 1;
+  var nextNotationId = 1;
+  var nextChallengeId = 1;
 
   let communities = Map.empty<CommunityId, Community>();
-  let communityPosts = Map.empty<CommunityId, List.List<Post>>();
-  let notationGames = Map.empty<NotationGameId, NotationGame>();
+  let communityPosts = Map.empty<CommunityId, List.List<CommunityPost>>();
+  let notations = Map.empty<NotationId, Notation>();
+  let challenges = Map.empty<ChallengeId, Challenge>();
   let userProfiles = Map.empty<Principal, UserProfile>();
+
+  type CommunityMembers = Map.Map<CommunityId, List.List<Principal>>;
+  let communityMembers : CommunityMembers = Map.empty<CommunityId, List.List<Principal>>();
 
   let accessControlState = AccessControl.initState();
   include MixinAuthorization(accessControlState);
+  include MixinStorage();
 
   // Community functions
 
@@ -82,11 +103,13 @@ actor {
       name;
       description;
       owner = caller;
-      members = [caller];
       createdAt = Time.now();
     };
     communities.add(id, community);
-    communityPosts.add(id, List.empty<Post>());
+    communityPosts.add(id, List.empty<CommunityPost>());
+    let members = List.empty<Principal>();
+    members.add(caller);
+    communityMembers.add(id, members);
     id;
   };
 
@@ -94,20 +117,26 @@ actor {
     communities.values().toArray();
   };
 
+  public query ({ caller }) func getCommunity(id : CommunityId) : async ?Community {
+    communities.get(id);
+  };
+
   public shared ({ caller }) func joinCommunity(id : CommunityId) : async () {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can join communities");
     };
-    let community = switch (communities.get(id)) {
+    switch (communities.get(id)) {
       case (null) { Runtime.trap("Community not found") };
-      case (?c) { c };
-    };
-    if (community.members.find(func(member) { member == caller }) == null) {
-      let updatedCommunity = {
-        community with
-        members = community.members.concat([caller]);
+      case (?_) {
+        let members = switch (communityMembers.get(id)) {
+          case (null) { List.empty<Principal>() };
+          case (?m) { m };
+        };
+        if (not members.any(func(member) { member == caller })) {
+          members.add(caller);
+          communityMembers.add(id, members);
+        };
       };
-      communities.add(id, updatedCommunity);
     };
   };
 
@@ -115,98 +144,183 @@ actor {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can leave communities");
     };
-    let community = switch (communities.get(id)) {
-      case (null) { Runtime.trap("Community not found") };
-      case (?c) { c };
-    };
-    let filteredMembers = community.members.filter(func(member) { member != caller });
-    let updatedCommunity = {
-      community with
-      members = filteredMembers;
-    };
-    communities.add(id, updatedCommunity);
-  };
-
-  public query ({ caller }) func getCommunity(id : CommunityId) : async Community {
     switch (communities.get(id)) {
       case (null) { Runtime.trap("Community not found") };
-      case (?community) { community };
-    };
-  };
-
-  public shared ({ caller }) func createPost(communityId : CommunityId, title : Text, content : Text) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can create posts");
-    };
-    switch (communities.get(communityId)) {
-      case (null) { Runtime.trap("Community not found") };
-      case (?community) {
-        if (community.members.find(func(member) { member == caller }) == null) {
-          Runtime.trap("Not a member of the community");
-        };
-        let post = {
-          communityId;
-          author = caller;
-          title;
-          content;
-          createdAt = Time.now();
-        };
-        switch (communityPosts.get(communityId)) {
+      case (?_) {
+        switch (communityMembers.get(id)) {
           case (null) { Runtime.trap("Community not found") };
-          case (?posts) {
-            posts.add(post);
+          case (?members) {
+            let filteredMembers = members.filter(func(member) { member != caller });
+            communityMembers.add(id, filteredMembers);
           };
         };
       };
     };
   };
 
-  public query ({ caller }) func listPosts(communityId : CommunityId) : async [Post] {
-    switch (communityPosts.get(communityId)) {
-      case (null) { Runtime.trap("Community not found") };
-      case (?posts) { posts.toArray().sort() };
+  public query ({ caller }) func getCommunityMembers(communityId : CommunityId) : async [Principal] {
+    switch (communityMembers.get(communityId)) {
+      case (null) { [] };
+      case (?members) { members.toArray() };
     };
   };
 
-  // Notation game functions
-
-  public shared ({ caller }) func saveNotationGame(title : Text, pgn : Text) : async NotationGameId {
+  public shared ({ caller }) func createPost(communityId : CommunityId, title : Text, content : Text) : async PostId {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can save notation games");
+      Runtime.trap("Unauthorized: Only users can create posts");
     };
-    let id = nextNotationGameId;
-    nextNotationGameId += 1;
-    let game = {
+    switch (communities.get(communityId)) {
+      case (null) { Runtime.trap("Community not found") };
+      case (?_) {
+        switch (communityMembers.get(communityId)) {
+          case (null) { Runtime.trap("Not a member of the community") };
+          case (?members) {
+            if (not members.any(func(member) { member == caller })) {
+              Runtime.trap("Not a member of the community");
+            };
+            let id = nextPostId;
+            nextPostId += 1;
+            let post = {
+              id;
+              communityId;
+              author = caller;
+              title;
+              content;
+              createdAt = Time.now();
+            };
+            switch (communityPosts.get(communityId)) {
+              case (null) { Runtime.trap("Community not found") };
+              case (?posts) {
+                posts.add(post);
+                id;
+              };
+            };
+          };
+        };
+      };
+    };
+  };
+
+  public query ({ caller }) func listPosts(communityId : CommunityId) : async [CommunityPost] {
+    switch (communityPosts.get(communityId)) {
+      case (null) { [] };
+      case (?posts) {
+        posts.toArray().sort();
+      };
+    };
+  };
+
+  module CommunityPost {
+    public func compare(post1 : CommunityPost, post2 : CommunityPost) : Order.Order {
+      Int.compare(post2.createdAt, post1.createdAt);
+    };
+  };
+
+  public query ({ caller }) func getPost(communityId : CommunityId, postId : PostId) : async ?CommunityPost {
+    switch (communityPosts.get(communityId)) {
+      case (null) { null };
+      case (?posts) {
+        posts.toArray().find(func(post) { post.id == postId });
+      };
+    };
+  };
+
+  // Notation functions
+
+  public shared ({ caller }) func saveNotation(title : Text, pgn : Text, description : Text, photoBlobId : ?Text) : async NotationId {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can save notations");
+    };
+    let id = nextNotationId;
+    nextNotationId += 1;
+    let notation = {
       id;
       title;
       pgn;
+      description;
+      photoBlobId;
       owner = caller;
       createdAt = Time.now();
     };
-    notationGames.add(id, game);
+    notations.add(id, notation);
     id;
   };
 
-  public query ({ caller }) func listNotationGames() : async [NotationGame] {
-    notationGames.values().toArray();
+  public query ({ caller }) func listNotations() : async [Notation] {
+    notations.values().toArray();
   };
 
-  public query ({ caller }) func getNotationGame(id : NotationGameId) : async NotationGame {
-    switch (notationGames.get(id)) {
-      case (null) { Runtime.trap("Game not found") };
-      case (?game) { game };
-    };
+  public query ({ caller }) func getNotation(id : NotationId) : async ?Notation {
+    notations.get(id);
   };
 
-  public shared ({ caller }) func deleteNotationGame(id : NotationGameId) : async () {
+  public shared ({ caller }) func deleteNotation(id : NotationId) : async () {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can delete notation games");
+      Runtime.trap("Unauthorized: Only users can delete notations");
     };
-    switch (notationGames.get(id)) {
-      case (null) { Runtime.trap("Game not found") };
-      case (?game) {
-        if (game.owner != caller) { Runtime.trap("Unauthorized: Not the owner of the game") };
-        notationGames.remove(id);
+    switch (notations.get(id)) {
+      case (null) { Runtime.trap("Notation not found") };
+      case (?notation) {
+        if (notation.owner != caller) { Runtime.trap("Unauthorized: Not the owner of the notation") };
+        notations.remove(id);
+      };
+    };
+  };
+
+  // Challenge functions
+
+  public shared ({ caller }) func createChallenge(timeControl : TimeControl, colorPref : Text) : async ChallengeId {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can create challenges");
+    };
+    let id = nextChallengeId;
+    nextChallengeId += 1;
+    let challenge = {
+      id;
+      creator = caller;
+      timeControl;
+      colorPref;
+      createdAt = Time.now();
+      acceptedBy = null;
+    };
+    challenges.add(id, challenge);
+    id;
+  };
+
+  public query ({ caller }) func listOpenChallenges() : async [Challenge] {
+    challenges.values().toArray().filter(func(challenge) { challenge.acceptedBy == null });
+  };
+
+  public shared ({ caller }) func acceptChallenge(id : ChallengeId) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can accept challenges");
+    };
+    switch (challenges.get(id)) {
+      case (null) { Runtime.trap("Challenge not found") };
+      case (?challenge) {
+        if (challenge.acceptedBy != null) {
+          Runtime.trap("Challenge already accepted");
+        };
+        let updatedChallenge = { challenge with acceptedBy = ?caller };
+        challenges.add(id, updatedChallenge);
+      };
+    };
+  };
+
+  public shared ({ caller }) func cancelChallenge(id : ChallengeId) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can cancel challenges");
+    };
+    switch (challenges.get(id)) {
+      case (null) { Runtime.trap("Challenge not found") };
+      case (?challenge) {
+        if (challenge.creator != caller) {
+          Runtime.trap("Unauthorized: Not the creator of the challenge");
+        };
+        if (challenge.acceptedBy != null) {
+          Runtime.trap("Cannot cancel accepted challenge");
+        };
+        challenges.remove(id);
       };
     };
   };
@@ -221,27 +335,19 @@ actor {
   };
 
   public query ({ caller }) func getUserProfile(user : Principal) : async ?UserProfile {
-    if (caller != user and not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Can only view your own profile");
-    };
+    // Reads are public - anyone can view any profile
     userProfiles.get(user);
   };
 
-  public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
+  public shared ({ caller }) func saveCallerUserProfile(username : Text, bio : Text) : async () {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can save profiles");
-    };
-    userProfiles.add(caller, profile);
-  };
-
-  public shared ({ caller }) func updateDisplayName(displayName : Text) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can update display name");
     };
     let profile = switch (userProfiles.get(caller)) {
       case (null) {
         {
-          displayName;
+          username;
+          bio;
           rating = 1200;
           gamesPlayed = 0;
           wins = 0;
@@ -249,7 +355,7 @@ actor {
           draws = 0;
         };
       };
-      case (?p) { { p with displayName } };
+      case (?p) { { p with username; bio } };
     };
     userProfiles.add(caller, profile);
   };
